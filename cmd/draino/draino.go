@@ -58,6 +58,7 @@ func main() {
 		evictionHeadroom = app.Flag("eviction-headroom", "Additional time to wait after a pod's termination grace period for it to have been deleted.").Default(kubernetes.DefaultEvictionOverhead.String()).Duration()
 		drainBuffer      = app.Flag("drain-buffer", "Minimum time between starting each drain. Nodes are always cordoned immediately.").Default(kubernetes.DefaultDrainBuffer.String()).Duration()
 		nodeLabels       = app.Flag("node-label", "Only nodes with this label will be eligible for cordoning and draining. May be specified multiple times.").PlaceHolder("KEY=VALUE").StringMap()
+		nodeLabelLogic   = app.Flag("node-label-logic", "If multiple labels are specified are they AND or OR together").Default("AND").String()
 		namespace        = app.Flag("namespace", "Namespace used to create leader election lock object.").Default("kube-system").String()
 
 		leaderElectionLeaseDuration = app.Flag("leader-election-lease-duration", "Lease duration for leader election.").Default(DefaultLeaderElectionLeaseDuration.String()).Duration()
@@ -163,8 +164,23 @@ func main() {
 	}
 
 	cf := cache.FilteringResourceEventHandler{FilterFunc: kubernetes.NewNodeConditionFilter(*conditions), Handler: h}
-	lf := cache.FilteringResourceEventHandler{FilterFunc: kubernetes.NewNodeLabelFilter(*nodeLabels), Handler: cf}
-	nodes := kubernetes.NewNodeWatch(cs, lf)
+
+	nodeLabelFilters := make([]cache.ResourceEventHandler, 0)
+
+	if *nodeLabelLogic == "AND" {
+		nodeLabelFilters = append(nodeLabelFilters, cache.FilteringResourceEventHandler{FilterFunc: kubernetes.NewNodeLabelFilter(*nodeLabels), Handler: cf})
+
+	} else if *nodeLabelLogic == "OR" {
+		for k, v := range *nodeLabels {
+			var filterLabel map[string]string
+			filterLabel[k] = v
+			nodeLabelFilters = append(nodeLabelFilters, cache.FilteringResourceEventHandler{FilterFunc: kubernetes.NewNodeLabelFilter(filterLabel), Handler: cf})
+		}
+	} else {
+		kingpin.FatalIfError(err, "node-label-logic is invalid must be one of [ 'AND', 'OR' ]")
+	}
+
+	nodes := kubernetes.NewNodeWatch(cs, nodeLabelFilters...)
 
 	id, err := os.Hostname()
 	kingpin.FatalIfError(err, "cannot get hostname")

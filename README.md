@@ -38,6 +38,7 @@ Flags:
       --drain-buffer=10m0s       Minimum time between starting each drain. Nodes are always cordoned immediately.
       --node-label=KEY=VALUE ...
                                  Only nodes with this label will be eligible for cordoning and draining. May be specified multiple times.
+      --node-label-logic=AND     If multiple node labels are specified is the resulting filter the AND or the labels or the OR of the labels.
       --namespace="kube-system"  Namespace used to create leader election lock object.
       --leader-election-lease-duration=15s
                                  Lease duration for leader election.
